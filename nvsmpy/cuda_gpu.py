@@ -31,5 +31,5 @@ class CudaGPU:
     def add_process(self, proc: psutil.Process) -> None:
         self.processes.append(proc)
 
-    def is_available(self):
-        return len(self.processes) == 0
+    def is_available(self, max_n_processes: int = 0):
+        return len(self.processes) <= max_n_processes

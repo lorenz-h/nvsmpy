@@ -18,6 +18,9 @@ class CudaCluster:
 
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 
+        self.n_visible_devices = None
+        self.max_n_processes = None
+
         self.devices = self.get_devices()
         self.update_device_occupation()
 
@@ -45,7 +48,8 @@ class CudaCluster:
             proc = psutil.Process(int(app_info["pid"]))
             self.devices[uuid].add_process(proc)
 
-    def set_visible_devices(self, n_devices=1):
+    def set_visible_devices(self, n_devices=1, max_n_processes=0):
+        self.max_n_processes = max_n_processes
         self.n_visible_devices = n_devices
         return self
 
@@ -53,6 +57,10 @@ class CudaCluster:
         fields = ("pid", "process_name", "gpu_uuid")
         proc_info_cmd = ["nvidia-smi", "--format=csv", f"--query-compute-apps={','.join(fields)}"]
         return self.parse_smi_command(proc_info_cmd, fields=fields)
+
+    def query_gpu(self, *fields) -> List[Dict]:
+        dev_info_cmd = ["nvidia-smi", "--format=csv", f"--query-gpu={','.join(fields)}"]
+        device_infos = self.parse_smi_command(dev_info_cmd, fields=fields)
 
     @staticmethod
     def parse_smi_command(command: List[str], fields: Tuple) -> List:
@@ -63,15 +71,18 @@ class CudaCluster:
         return list(reader)
 
     def __str__(self):
+        self.update_device_occupation()
         devices_str = "\n".join([str(device) for device in self.devices.values()])
         return f"Cluster:\n {devices_str}"
 
     def __enter__(self):
+        self.update_device_occupation()
         if self.n_visible_devices is None:
             raise AttributeError("Could not enter Cluster object directly. Please use with "
                                  "cluster.set_visible_devices() instead.")
 
-        available_devices = [str(device.index) for device in self.devices.values() if device.is_available()]
+        available_devices = [str(device.index) for device in
+                             self.devices.values() if device.is_available(self.max_n_processes)]
         if len(available_devices) >= self.n_visible_devices:
             # set CUDA_VISIBLE_DEVICES to <self.n_visible_devices> available devices.
             os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(available_devices[:self.n_visible_devices])
