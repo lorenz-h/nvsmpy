@@ -48,7 +48,7 @@ class CudaCluster:
             proc = psutil.Process(int(app_info["pid"]))
             self.devices[uuid].add_process(proc)
 
-    def set_visible_devices(self, n_devices=1, max_n_processes=0):
+    def limit_visible_devices(self, n_devices=1, max_n_processes=0):
         self.max_n_processes = max_n_processes
         self.n_visible_devices = n_devices
         return self
@@ -60,8 +60,8 @@ class CudaCluster:
 
     def query_gpu(self, *fields) -> List[Dict]:
         dev_info_cmd = ["nvidia-smi", "--format=csv", f"--query-gpu={','.join(fields)}"]
-        device_infos = self.parse_smi_command(dev_info_cmd, fields=fields)
-
+        return self.parse_smi_command(dev_info_cmd, fields=fields)
+    
     @staticmethod
     def parse_smi_command(command: List[str], fields: Tuple) -> List:
         smi_output = subprocess.check_output(command).strip().decode("utf-8")
@@ -79,7 +79,7 @@ class CudaCluster:
         self.update_device_occupation()
         if self.n_visible_devices is None:
             raise AttributeError("Could not enter Cluster object directly. Please use with "
-                                 "cluster.set_visible_devices() instead.")
+                                 "cluster.limit_visible_devices() instead.")
 
         available_devices = [str(device.index) for device in
                              self.devices.values() if device.is_available(self.max_n_processes)]
