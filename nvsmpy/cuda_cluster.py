@@ -48,7 +48,7 @@ class CudaCluster:
             proc = psutil.Process(int(app_info["pid"]))
             self.devices[uuid].add_process(proc)
 
-    def limit_visible_devices(self, n_devices=1, max_n_processes=0):
+    def limit_visible_devices(self, n_devices=1, max_n_processes=1):
         self.max_n_processes = max_n_processes
         self.n_visible_devices = n_devices
         return self
@@ -86,7 +86,8 @@ class CudaCluster:
         if len(available_devices) >= self.n_visible_devices:
             # set CUDA_VISIBLE_DEVICES to <self.n_visible_devices> available devices.
             os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(available_devices[:self.n_visible_devices])
-            logger.warning(f"Set visible devices: {available_devices[:self.n_visible_devices]}")
+            logger.warning(f"Set visible devices to: "
+                           f"{['gpu:'+idx for idx in available_devices[:self.n_visible_devices]]}")
         else:
             raise RuntimeError(f"Could not find {self.n_visible_devices} available devices.")
 

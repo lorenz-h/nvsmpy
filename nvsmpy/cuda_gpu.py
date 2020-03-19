@@ -34,11 +34,11 @@ class CudaGPU:
     def add_process(self, proc: psutil.Process) -> None:
         self.processes.append(proc)
 
-    def is_available(self, max_n_processes: int = 0):
+    def is_available(self, max_n_processes: int = 1):
 
         if any([proc.username != self.user for proc in self.processes]):
             # if any of the processes on this GPU is owned by another user mark GPU as unavailable
             return False
         else:
             # if more than max_n_processes are already running on the GPU mark the GPU as unavailable.
-            return len(self.processes) <= max_n_processes
+            return len(self.processes) < max_n_processes
