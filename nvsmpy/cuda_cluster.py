@@ -61,7 +61,7 @@ class CudaCluster:
     def query_gpu(self, *fields) -> List[Dict]:
         dev_info_cmd = ["nvidia-smi", "--format=csv", f"--query-gpu={','.join(fields)}"]
         return self.parse_smi_command(dev_info_cmd, fields=fields)
-    
+
     @staticmethod
     def parse_smi_command(command: List[str], fields: Tuple) -> List:
         smi_output = subprocess.check_output(command).strip().decode("utf-8")
@@ -86,6 +86,7 @@ class CudaCluster:
         if len(available_devices) >= self.n_visible_devices:
             # set CUDA_VISIBLE_DEVICES to <self.n_visible_devices> available devices.
             os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(available_devices[:self.n_visible_devices])
+            logger.warning(f"Set visible devices: {available_devices[:self.n_visible_devices]}")
         else:
             raise RuntimeError(f"Could not find {self.n_visible_devices} available devices.")
 
