@@ -55,11 +55,11 @@ class CudaCluster:
 
     def get_compute_apps_information(self) -> List[Dict]:
         fields = ("pid", "process_name", "gpu_uuid")
-        proc_info_cmd = ["nvidia-smi", "--format=csv", f"--query-compute-apps={','.join(fields)}"]
+        proc_info_cmd = ["nvidia-smi", "--format=csv,noheader,nounits", f"--query-compute-apps={','.join(fields)}"]
         return self.parse_smi_command(proc_info_cmd, fields=fields)
 
     def query_gpu(self, *fields) -> List[Dict]:
-        dev_info_cmd = ["nvidia-smi", "--format=csv", f"--query-gpu={','.join(fields)}"]
+        dev_info_cmd = ["nvidia-smi", "--format=csv,noheader,nounits", f"--query-gpu={','.join(fields)}"]
         device_infos = self.parse_smi_command(dev_info_cmd, fields=fields)
 
     @staticmethod
@@ -67,7 +67,6 @@ class CudaCluster:
         smi_output = subprocess.check_output(command).strip().decode("utf-8")
         f = StringIO(smi_output)
         reader = csv.DictReader(f, fieldnames=fields, delimiter=',', skipinitialspace=True)
-        next(reader)  # skips the headers
         return list(reader)
 
     def __str__(self):
