@@ -2,6 +2,7 @@ import subprocess
 import csv
 import os
 import logging
+import time
 from io import StringIO
 from typing import List, Tuple, Dict
 
@@ -17,32 +18,44 @@ class CudaCluster:
     def __init__(self):
 
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-
         self.n_visible_devices = None
         self.max_n_processes = None
+        self.last_update: float = time.time()
+        self.min_update_interval: int = 5
 
-        self.devices = self.get_devices()
+        self.devices = self.create_devices()
         self.update_device_occupation()
 
     def __getitem__(self, item):
-        return self.devices[item]
+        return [device for device in self.devices.values() if device.index == item][0]
 
-    def get_devices(self):
+    def get_gpu_infos(self):
         fields = ("index", "uuid", "name")
         dev_info_cmd = ["nvidia-smi", "--format=csv", f"--query-gpu={','.join(fields)}"]
-        device_infos = self.parse_smi_command(dev_info_cmd, fields=fields)
-        logger.debug(f"Parsed device info from nvidia-smi: {device_infos}")
-        return {parse_gpu_uuid(device_info["uuid"]): CudaGPU(**device_info) for device_info in device_infos}
+        gpu_infos = self.parse_smi_command(dev_info_cmd, fields=fields)
+        logger.debug(f"Parsed device info from nvidia-smi: {gpu_infos}")
+        return gpu_infos
 
-    def update_device_state(self):
-        # load new information from query-gpu
-        pass
+    def create_devices(self):
+        gpu_infos = self.get_gpu_infos()
+        return {parse_gpu_uuid(gpu_info["uuid"]): CudaGPU(**gpu_info) for gpu_info in gpu_infos}
+
+    def update(self, force: bool = True):
+        if time.time() - self.last_update > self.min_update_interval or force:
+            gpu_infos = self.get_gpu_infos()
+            for gpu_info in gpu_infos:
+                uuid = parse_gpu_uuid(gpu_info["uuid"])
+                self.devices[uuid].update(**gpu_info)
+            self.update_device_occupation()
+            self.last_update = time.time()
+        else:
+            logger.debug(f"will not update states because last state "
+                         f"update was less than {self.min_update_interval} seconds old.")
 
     def update_device_occupation(self):
         for device in self.devices.values():
             device.reset_processes()
         apps_info = self.get_compute_apps_information()
-        logger.debug(f"Parsed compute apps info from nvidia-smi: {apps_info}")
         for app_info in apps_info:
             uuid = parse_gpu_uuid(app_info["gpu_uuid"])
             proc = psutil.Process(int(app_info["pid"]))
@@ -56,7 +69,9 @@ class CudaCluster:
     def get_compute_apps_information(self) -> List[Dict]:
         fields = ("pid", "process_name", "gpu_uuid")
         proc_info_cmd = ["nvidia-smi", "--format=csv", f"--query-compute-apps={','.join(fields)}"]
-        return self.parse_smi_command(proc_info_cmd, fields=fields)
+        apps_info = self.parse_smi_command(proc_info_cmd, fields=fields)
+        logger.debug(f"Parsed compute apps info from nvidia-smi: {apps_info}")
+        return apps_info
 
     def query_gpu(self, *fields) -> List[Dict]:
         dev_info_cmd = ["nvidia-smi", "--format=csv", f"--query-gpu={','.join(fields)}"]
@@ -71,12 +86,13 @@ class CudaCluster:
         return list(reader)
 
     def __str__(self):
-        self.update_device_occupation()
+        self.update(force=False)
         devices_str = "\n".join([str(device) for device in self.devices.values()])
-        return f"Cluster:\n {devices_str}"
+        line = "-------------------------------------"
+        return f"{line}\nCuda Cluster:\n{devices_str}\n{line}"
 
     def __enter__(self):
-        self.update_device_occupation()
+        self.update(force=False)
         if self.n_visible_devices is None:
             raise AttributeError("Could not enter Cluster object directly. Please use with "
                                  "cluster.limit_visible_devices() instead.")

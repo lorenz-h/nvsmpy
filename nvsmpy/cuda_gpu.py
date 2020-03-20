@@ -9,21 +9,25 @@ def parse_gpu_uuid(uuid_str: str) -> int:
 
 
 class CudaGPU:
-    def __init__(self, index, uuid: str, name: str):
+    def __init__(self, index: str, uuid: str, name: str):
         self.index: int = int(index)
         self.uuid: int = parse_gpu_uuid(uuid)
         self.name: str = name
-        self.visible: bool = True
 
         self.user = getpass.getuser()
         self.processes = []
 
+    def update(self, index: str, uuid: str, name: str) -> None:
+        self.index = int(index)
+        self.uuid = parse_gpu_uuid(uuid)
+        self.name = name
+
     def __str__(self):
 
-        procs_str = "\n".join([f"User:{proc.username()}, PID: {proc.pid}"for proc in self.processes])
+        procs_str = " - ".join([f"(user:{proc.username()}, pid: {proc.pid})"for proc in self.processes])
 
-        return f"<{self.name}> <{self.index}> <{self.uuid}> <{self.is_available()}>\n" \
-               f"<running processes>:\n {procs_str}"
+        return f"name: {self.name}, index: {self.index}, available: {self.is_available()}\n" \
+               f"processes ({len(self.processes)}):{procs_str}"
 
     def __hash__(self):
         return self.uuid
