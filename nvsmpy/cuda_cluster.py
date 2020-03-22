@@ -4,7 +4,7 @@ import os
 import logging
 import time
 from io import StringIO
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 
 import psutil
 
@@ -19,6 +19,7 @@ class CudaCluster:
 
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         self.n_visible_devices = None
+        self.visible_device_indices: Optional[List[int]] = None
         self.max_n_processes = None
         self.last_update: float = time.time()
         self.min_update_interval: int = 5
@@ -101,13 +102,15 @@ class CudaCluster:
                              self.devices.values() if device.is_available(self.max_n_processes)]
         if len(available_devices) >= self.n_visible_devices:
             # set CUDA_VISIBLE_DEVICES to <self.n_visible_devices> available devices.
-            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(available_devices[:self.n_visible_devices])
+            self.visible_device_indices = available_devices[:self.n_visible_devices]
+            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(self.visible_device_indices)
             logger.warning(f"Set visible devices to: "
-                           f"{['gpu:'+idx for idx in available_devices[:self.n_visible_devices]]}")
+                           f"{['gpu:'+idx for idx in self.visible_device_indices]}")
         else:
             raise RuntimeError(f"Could not find {self.n_visible_devices} available devices.")
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.n_visible_devices = None
+        self.visible_device_indices = None
         # reset CUDA_VISIBLE_DEVICES to be all devices on the system:
         os.environ["CUDA_VISIBLE_DEVICES"] = ",".join([str(device.index) for device in self.devices.values()])
