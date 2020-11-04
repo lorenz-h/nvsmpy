@@ -19,7 +19,7 @@ setup_kwargs = {
         "Operating System :: OS Independent",
     ],
     "install_requires": [
-        "gputil"
+        "psutil"
     ],
     "python_requires": '>:3.5',
 }
