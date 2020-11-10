@@ -4,18 +4,23 @@ import os
 import logging
 import time
 from io import StringIO
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict, Optional, Sequence
 
 import psutil
 
 from .cuda_gpu import CudaGPU, parse_gpu_uuid
 
 
-logger = logging.getLogger(__file__)
+class ClusterModeError(RuntimeError):
+    def __init__(self, current_mode: Optional[str]):
+        msg: str = f"Cuda Cluster device filtering was in mode {current_mode}." \
+                   f"You may only use either cuda_cluster.visible_devices() or cuda_cluster.available_devices()"
+        super().__init__(msg)
 
 
 class CudaCluster:
     def __init__(self):
+        self.logger = logging.getLogger(__file__)
 
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         self.n_visible_devices = None
@@ -23,7 +28,7 @@ class CudaCluster:
         self.max_n_processes = None
         self.last_update: float = time.time()
         self.min_update_interval: int = 5
-
+        self.mode: Optional[str] = None
         self.devices = self.create_devices()
         self.update_device_occupation()
 
@@ -34,7 +39,7 @@ class CudaCluster:
         fields = ("index", "uuid", "name")
         dev_info_cmd = ["nvidia-smi", "--format=csv", f"--query-gpu={','.join(fields)}"]
         gpu_infos = self.parse_smi_command(dev_info_cmd, fields=fields)
-        logger.debug(f"Parsed device info from nvidia-smi: {gpu_infos}")
+        self.logger.debug(f"Parsed device info from nvidia-smi: {gpu_infos}")
         return gpu_infos
 
     def create_devices(self):
@@ -50,8 +55,8 @@ class CudaCluster:
             self.update_device_occupation()
             self.last_update = time.time()
         else:
-            logger.debug(f"will not update states because last state "
-                         f"update was less than {self.min_update_interval} seconds old.")
+            self.logger.debug(f"will not update states because last state "
+                              f"update was less than {self.min_update_interval} seconds old.")
 
     def update_device_occupation(self):
         for device in self.devices.values():
@@ -62,16 +67,27 @@ class CudaCluster:
             proc = psutil.Process(int(app_info["pid"]))
             self.devices[uuid].add_process(proc)
 
-    def limit_visible_devices(self, n_devices=1, max_n_processes=1):
+    def available_devices(self, n_devices=1, max_n_processes=1):
         self.max_n_processes = max_n_processes
         self.n_visible_devices = n_devices
+        if self.mode is not None:
+            raise ClusterModeError(self.mode)
+        self.mode = "available_devices"
+        return self
+
+    def visible_devices(self, *device_ids: Sequence[int]):
+        if self.mode is not None:
+            raise ClusterModeError(self.mode)
+        self.mode = "visible_devices"
+        self.n_visible_devices = len(device_ids)
+        self.visible_device_indices = list(device_ids)
         return self
 
     def get_compute_apps_information(self) -> List[Dict]:
         fields = ("pid", "process_name", "gpu_uuid")
         proc_info_cmd = ["nvidia-smi", "--format=csv", f"--query-compute-apps={','.join(fields)}"]
         apps_info = self.parse_smi_command(proc_info_cmd, fields=fields)
-        logger.debug(f"Parsed compute apps info from nvidia-smi: {apps_info}")
+        self.logger.debug(f"Parsed compute apps info from nvidia-smi: {apps_info}")
         return apps_info
 
     def query_gpu(self, *fields) -> List[Dict]:
@@ -93,24 +109,31 @@ class CudaCluster:
         return f"{line}\nCuda Cluster:\n{devices_str}\n{line}"
 
     def __enter__(self):
-        self.update(force=False)
-        if self.n_visible_devices is None:
-            raise AttributeError("Could not enter Cluster object directly. Please use with "
-                                 "cluster.limit_visible_devices() instead.")
+        if self.mode is None or self.n_visible_devices is None:
+            raise ClusterModeError(self.mode)
+        elif self.mode == "available_devices":
+            self.update(force=False)
+            available_devices: List[int] = [device.index for device in
+                                            self.devices.values() if device.is_available(self.max_n_processes)]
+            if len(available_devices) >= self.n_visible_devices:
+                # set CUDA_VISIBLE_DEVICES to <self.n_visible_devices> available devices.
+                self.visible_device_indices = available_devices[:self.n_visible_devices]
+                self._set_visible_devices()
+            else:
+                raise RuntimeError(f"Could not find {self.n_visible_devices} available devices.")
 
-        available_devices = [str(device.index) for device in
-                             self.devices.values() if device.is_available(self.max_n_processes)]
-        if len(available_devices) >= self.n_visible_devices:
-            # set CUDA_VISIBLE_DEVICES to <self.n_visible_devices> available devices.
-            self.visible_device_indices = available_devices[:self.n_visible_devices]
-            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(self.visible_device_indices)
-            logger.warning(f"Set visible devices to: "
-                           f"{['gpu:'+idx for idx in self.visible_device_indices]}")
+        elif self.mode == "visible_devices":
+            self._set_visible_devices()
         else:
-            raise RuntimeError(f"Could not find {self.n_visible_devices} available devices.")
+            raise ValueError(f"Unexpected mode {self.mode}")
+
+    def _set_visible_devices(self):
+        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join([str(idx) for idx in self.visible_device_indices])
+        self.logger.warning(f"Set visible devices to: {[f'gpu:{idx}' for idx in self.visible_device_indices]}")
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.n_visible_devices = None
         self.visible_device_indices = None
+        self.mode = None
         # reset CUDA_VISIBLE_DEVICES to be all devices on the system:
         os.environ["CUDA_VISIBLE_DEVICES"] = ",".join([str(device.index) for device in self.devices.values()])

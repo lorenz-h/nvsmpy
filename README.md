@@ -8,7 +8,15 @@ from nvsmpy import CudaCluster
 
 cluster = CudaCluster()
 print(cluster)
-with cluster.limit_visible_devices():
+
+# To limit access to any two unused GPUs:
+with cluster.available_devices(n_devices=2):
     print(os.environ["CUDA_VISIBLE_DEVICES"])
     # your code goes here
+
+# Alternatively limit access to GPUs 0 and 7, regardless of availability:
+with cluster.visible_devices(0, 3, 7):
+    print(os.environ["CUDA_VISIBLE_DEVICES"])
+    # your code goes here
+
 ```
