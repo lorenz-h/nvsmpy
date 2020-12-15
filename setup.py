@@ -8,7 +8,7 @@ setup_kwargs = {
     "version": "0.2.1",
     "author": "lorenz-h",
     "author_email": "lorenz.hetzel@yahoo.de",
-    "description": "Find unused GPU devices on your system.",
+    "description": "Find unoccupied GPUs on multi-user systems",
     "long_description": long_description,
     "long_description_content_type": "text/markdown",
     "url": "https://github.com/lorenz-h/nvsmpy",
