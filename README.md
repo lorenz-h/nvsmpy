@@ -1,6 +1,5 @@
 # nvsmpy
-
-This package parses information from nvidia-smi into python. You can use it to display usage information about your GPUs, or to select an unoccupied GPU to run your experiments on. It can set the CUDA_VISIBLE_DEVICES environment variable to limit your access to a single or multiple available GPUs. A RuntimeError will be raised if all GPUs are busy.
+This package automatically manages your `CUDA_VISIBLE_DEVICES` environment variable to avoid using GPUs that are currently being used by other users on a multi-user, multi-gpu system. A RuntimeError will be raised if all GPUs are busy. If you pass the `max_n_processes` argument to `available_devices()` you may run multiple processes under your system username on a given GPU at the same time.
 
 ## Installation
 ```shell
