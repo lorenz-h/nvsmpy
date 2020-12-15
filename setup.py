@@ -5,13 +5,13 @@ with open("README.md", "r") as fh:
 
 setup_kwargs = {
     "name": "nvsmpy",
-    "version": 0.1,
+    "version": 0.2,
     "author": "Lorenz Hetzel",
-    "author_email": "hetzell@student.ethz.ch",
+    "author_email": "lorenz.hetzel@yahoo.de",
     "description": "Parsing of GPU information from nvidia-smi",
     "long_description": long_description,
     "long_description_content_type": "text/markdown",
-    "url": "https://github.com/idsc-frazzoli/gpu_lock",
+    "url": "https://github.com/lorenz-h/nvsmpy",
     "packages": find_packages(),
     "classifiers": [
         "Programming Language :: Python :: 3",
@@ -19,7 +19,8 @@ setup_kwargs = {
         "Operating System :: OS Independent",
     ],
     "install_requires": [
-        "psutil"
+        "psutil",
+        "pynvml"
     ],
     "python_requires": '>:3.5',
 }

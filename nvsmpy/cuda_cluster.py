@@ -1,14 +1,13 @@
-import subprocess
-import csv
 import os
 import logging
 import time
-from io import StringIO
-from typing import List, Tuple, Dict, Optional, Sequence
+from typing import List, Dict, Optional, Sequence
 
 import psutil
+from pynvml import nvmlDeviceGetComputeRunningProcesses
+from pynvml.smi import nvidia_smi
 
-from .cuda_gpu import CudaGPU, parse_gpu_uuid
+from .cuda_gpu import CudaGPU, parse_gpu_uuid, parse_device_index
 
 
 class ClusterModeError(RuntimeError):
@@ -36,15 +35,22 @@ class CudaCluster:
         return [device for device in self.devices.values() if device.index == item][0]
 
     def get_gpu_infos(self):
-        fields = ("index", "uuid", "name")
-        dev_info_cmd = ["nvidia-smi", "--format=csv", f"--query-gpu={','.join(fields)}"]
-        gpu_infos = self.parse_smi_command(dev_info_cmd, fields=fields)
-        self.logger.debug(f"Parsed device info from nvidia-smi: {gpu_infos}")
+        nvsmi = nvidia_smi.getInstance()
+        gpu_infos = nvsmi.DeviceQuery("index, uuid, name")
+        self.logger.debug(f"Got device info from nvidia-smi: {gpu_infos}")
         return gpu_infos
 
     def create_devices(self):
         gpu_infos = self.get_gpu_infos()
-        return {parse_gpu_uuid(gpu_info["uuid"]): CudaGPU(**gpu_info) for gpu_info in gpu_infos}
+
+        devices = {}
+
+        for info in gpu_infos["gpu"]:
+            gpu_idx: int = parse_device_index(info["minor_number"])
+            gpu_uuid: int = parse_gpu_uuid(info["uuid"])
+            devices[gpu_uuid] = CudaGPU(gpu_idx, gpu_uuid, info["product_name"])
+
+        return devices
 
     def update(self, force: bool = True):
         if time.time() - self.last_update > self.min_update_interval or force:
@@ -61,11 +67,10 @@ class CudaCluster:
     def update_device_occupation(self):
         for device in self.devices.values():
             device.reset_processes()
-        apps_info = self.get_compute_apps_information()
-        for app_info in apps_info:
-            uuid = parse_gpu_uuid(app_info["gpu_uuid"])
-            proc = psutil.Process(int(app_info["pid"]))
-            self.devices[uuid].add_process(proc)
+            procs = nvmlDeviceGetComputeRunningProcesses(device.handle)
+            for p in procs:
+                proc = psutil.Process(p.pid)
+                device.add_process(proc)
 
     def available_devices(self, n_devices=1, max_n_processes=1):
         self.max_n_processes = max_n_processes
@@ -83,24 +88,11 @@ class CudaCluster:
         self.visible_device_indices = list(device_ids)
         return self
 
-    def get_compute_apps_information(self) -> List[Dict]:
-        fields = ("pid", "process_name", "gpu_uuid")
-        proc_info_cmd = ["nvidia-smi", "--format=csv", f"--query-compute-apps={','.join(fields)}"]
-        apps_info = self.parse_smi_command(proc_info_cmd, fields=fields)
-        self.logger.debug(f"Parsed compute apps info from nvidia-smi: {apps_info}")
-        return apps_info
-
-    def query_gpu(self, *fields) -> List[Dict]:
-        dev_info_cmd = ["nvidia-smi", "--format=csv", f"--query-gpu={','.join(fields)}"]
-        return self.parse_smi_command(dev_info_cmd, fields=fields)
-
     @staticmethod
-    def parse_smi_command(command: List[str], fields: Tuple) -> List:
-        smi_output = subprocess.check_output(command).strip().decode("utf-8")
-        f = StringIO(smi_output)
-        reader = csv.DictReader(f, fieldnames=fields, delimiter=',', skipinitialspace=True)
-        next(reader)  # skips the headers
-        return list(reader)
+    def query_gpu(*fields) -> List[Dict]:
+        nvsmi = nvidia_smi.getInstance()
+        gpu_infos = nvsmi.DeviceQuery(','.join(fields))
+        return gpu_infos["gpu"]
 
     def __str__(self):
         self.update(force=False)
