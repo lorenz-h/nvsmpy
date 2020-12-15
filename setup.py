@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup_kwargs = {
     "name": "nvsmpy",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "author": "lorenz-h",
     "author_email": "lorenz.hetzel@yahoo.de",
     "description": "Find unoccupied GPUs on multi-user systems",
