@@ -8,14 +8,14 @@ setup_kwargs = {
     "version": 0.2,
     "author": "Lorenz Hetzel",
     "author_email": "lorenz.hetzel@yahoo.de",
-    "description": "Parsing of GPU information from nvidia-smi",
+    "description": "Find unused GPU devices on your system.",
     "long_description": long_description,
     "long_description_content_type": "text/markdown",
     "url": "https://github.com/lorenz-h/nvsmpy",
     "packages": find_packages(),
     "classifiers": [
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
+        "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
     ],
     "install_requires": [
