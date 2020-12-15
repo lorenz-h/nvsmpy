@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup_kwargs = {
     "name": "nvsmpy",
-    "version": 0.2,
+    "version": 0.2.1,
     "author": "lorenz-h",
     "author_email": "lorenz.hetzel@yahoo.de",
     "description": "Find unused GPU devices on your system.",
